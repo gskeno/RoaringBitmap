@@ -6,6 +6,7 @@ import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.roaringbitmap.CharIterator;
 import org.roaringbitmap.IntIterator;
+import org.roaringbitmap.RoaringBitmap;
 import org.roaringbitmap.RunContainer;
 
 import java.io.ByteArrayOutputStream;
@@ -38,6 +39,22 @@ public class TestRunContainer {
     MappeableRunContainer rc = new MappeableRunContainer(32200, 35000);
     rc.add((char)-1);
     assertEquals("[32200,34999][65535,65535]", rc.toString());
+  }
+
+  @Test
+  public void testRunOptimize(){
+    RoaringBitmap roaringBitmap = new RoaringBitmap();
+    for (int i = 0; i < 100; i++) {
+       roaringBitmap.add(i);
+    }
+    for (int i = 200; i < 205; i++) {
+      roaringBitmap.add(i);
+    }
+
+    roaringBitmap.add(207);
+    roaringBitmap.add(300);
+    boolean b = roaringBitmap.runOptimize();
+    System.out.println(b);
   }
 
   @Test

@@ -330,8 +330,10 @@ public final class ImmutableRoaringArray implements PointableRoaringArray {
         // we do it the hard way
         return getOffsetContainerSlow(k, true);
       }
+      // 4 + ((this.size + 7) / 8) is cookie header; 4 * this.size is descriptive header;  4 *k is offset header
       return buffer.getInt(4 + 4 * this.size + ((this.size + 7) / 8) + 4 * k);
     } else {
+      // 4+4 is cookie header; 4 * this.size is descriptive header; 4 *k is offset header
       return buffer.getInt(4 + 4 + 4 * this.size + 4 * k);
     }
   }

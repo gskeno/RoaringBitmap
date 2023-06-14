@@ -75,6 +75,11 @@ public final class RunContainer extends Container implements Cloneable {
     return -(x + 1);
   }
 
+  /**
+   * the 2 before sign, refer to the {@link #nbrruns}, the low 16 bits is meaningful
+   * @param numberOfRuns
+   * @return
+   */
   protected static int serializedSizeInBytes(int numberOfRuns) {
     return 2 + 2 * 2 * numberOfRuns; // each run requires 2 2-byte entries.
   }
@@ -89,12 +94,12 @@ public final class RunContainer extends Container implements Cloneable {
 
   }
 
-  private char[] valueslength;// we interleave values and lengths, so
+  private char[] valueslength;// we interleave(交错) values and lengths, so
   // that if you have the values 11,12,13,14,15, you store that as 11,4 where 4 means that beyond 11
   // itself, there are
-  // 4 contiguous values that follows.
+  // 4 contiguous(连续的) values that follows.
   // Other example: e.g., 1, 10, 20,0, 31,2 would be a concise representation of 1, 2, ..., 11, 20,
-  // 31, 32, 33
+  // 31, 32, 33.   for this example, there is 3 nbrruns
 
   int nbrruns = 0;// how many runs, this number should fit in 16 bits.
 
@@ -998,6 +1003,11 @@ public final class RunContainer extends Container implements Cloneable {
     }
   }
 
+  /**
+   * @see #serializedSizeInBytes() 
+   * @see #serializedSizeInBytes(int) 
+   * @return
+   */
   @Override
   public int getArraySizeInBytes() {
     return 2 + 4 * this.nbrruns; // "array" includes its size
