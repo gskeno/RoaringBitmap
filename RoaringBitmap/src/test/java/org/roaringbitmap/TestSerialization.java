@@ -199,14 +199,25 @@ public class TestSerialization {
     bitmap_b.deserialize(dis, buffer);
   }
 
-
+  @Test
+  public void testBasicBufferUse(){
+    ByteBuffer buffer = ByteBuffer.allocate(10);
+    buffer.put((byte) 1);
+    buffer.put((byte) 2);
+    buffer.put((byte) 3);
+    buffer.flip();
+    System.out.println(buffer.get(0));
+    System.out.println(buffer.get(1));
+    System.out.println(buffer.get(2));
+  }
 
   @Test
   public void testImmutableBuildingBySerialization() {
     presoutbb.rewind();
     ImmutableRoaringBitmap imrempty = new ImmutableRoaringBitmap(presoutbb);
-    presoutbb.position(presoutbb.position() + imrempty.serializedSizeInBytes());
     assertEquals(imrempty.isEmpty(), true);
+    // presoutbb contains 2 RoaringBitmap, the first is empty RoaringBitmap, here is the second
+    presoutbb.position(presoutbb.position() + imrempty.serializedSizeInBytes());
     ImmutableRoaringBitmap imrb = new ImmutableRoaringBitmap(presoutbb);
     int cksum1 = 0, cksum2 = 0, count1 = 0, count2 = 0;
     for (int x : bitmap_a) { // or bitmap_a1 for a version without run

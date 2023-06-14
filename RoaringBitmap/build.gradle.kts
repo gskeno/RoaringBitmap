@@ -32,6 +32,6 @@ tasks.test {
         showCauses = true
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
         // Helps investigating OOM. But too verbose to be activated by default
-        // showStandardStreams = true
+        showStandardStreams = true
     }
 }
