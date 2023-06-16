@@ -200,18 +200,6 @@ public class TestSerialization {
   }
 
   @Test
-  public void testBasicBufferUse(){
-    ByteBuffer buffer = ByteBuffer.allocate(10);
-    buffer.put((byte) 1);
-    buffer.put((byte) 2);
-    buffer.put((byte) 3);
-    buffer.flip();
-    System.out.println(buffer.get(0));
-    System.out.println(buffer.get(1));
-    System.out.println(buffer.get(2));
-  }
-
-  @Test
   public void testImmutableBuildingBySerialization() {
     presoutbb.rewind();
     ImmutableRoaringBitmap imrempty = new ImmutableRoaringBitmap(presoutbb);
