@@ -1,6 +1,7 @@
 package org.roaringbitmap.supplement;
 
 import org.junit.jupiter.api.Test;
+import org.roaringbitmap.BitmapContainer;
 
 import java.nio.ByteBuffer;
 
@@ -32,5 +33,21 @@ public class TestBuffer {
         System.out.println(position);
         slice.get();
 
+    }
+
+    @Test
+    public void testDivide() {
+        byte[] buffer = new byte[16];
+        final long[] bitmapArray = new long[BitmapContainer.MAX_CAPACITY / 64]; // 2^16个bit位
+        System.out.println("bitmapArray len " + bitmapArray.length);
+        System.out.println("bitmapArray len /8 " + bitmapArray.length/8);
+        System.out.println("bitmapArray len *8 " + bitmapArray.length*8);
+        System.out.println("iBlockMax" + bitmapArray.length / buffer.length / 8);
+        for (int iBlock = 0; iBlock <= bitmapArray.length / buffer.length / 8; iBlock++) {
+            int start = buffer.length * iBlock;
+            int end = Math.min(buffer.length * (iBlock + 1) - 1, 8 * bitmapArray.length);
+
+            System.out.println("start " + start + " end " + end);
+        }
     }
 }

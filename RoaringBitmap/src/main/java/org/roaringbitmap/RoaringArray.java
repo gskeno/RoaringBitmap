@@ -20,8 +20,8 @@ import static java.nio.ByteOrder.LITTLE_ENDIAN;
  * by end users.
  */
 public final class RoaringArray implements Cloneable, Externalizable, AppendableStorage<Container> {
-  private static final char SERIAL_COOKIE_NO_RUNCONTAINER = 12346;
-  private static final char SERIAL_COOKIE = 12347;
+  private static final char SERIAL_COOKIE_NO_RUNCONTAINER = 12346; // 无runContainer
+  private static final char SERIAL_COOKIE = 12347; // 有runContainer
   private static final int NO_OFFSET_THRESHOLD = 4;
 
   // bumped serialVersionUID with runcontainers, so default serialization
@@ -348,7 +348,7 @@ public final class RoaringArray implements Cloneable, Externalizable, Appendable
   }
 
   /**
-   * Deserialize.
+   * Deserialize. 这里有bug
    *
    * @param in the DataInput stream
    * @param buffer The buffer gets overwritten with data during deserialization. You can pass a NULL
@@ -369,14 +369,14 @@ public final class RoaringArray implements Cloneable, Externalizable, Appendable
           "We need a buffer with a length multiple of 8. was length=" + buffer.length);
     }
     
-    this.clear();
+    this.clear(); // 当前roaingbitmap清空，进行重建
     // little endian
     final int cookie = Integer.reverseBytes(in.readInt());
     if ((cookie & 0xFFFF) != SERIAL_COOKIE && cookie != SERIAL_COOKIE_NO_RUNCONTAINER) {
       throw new InvalidRoaringFormat("I failed to find a valid cookie.");
     }
     this.size = ((cookie & 0xFFFF) == SERIAL_COOKIE) ? (cookie >>> 16) + 1
-        : Integer.reverseBytes(in.readInt());
+        : Integer.reverseBytes(in.readInt()); // 有runContainer时,高16位+1就是容器个数；否则，再读一个int就是容器个数
     // logically we cannot have more than (1<<16) containers.
     if(this.size > (1<<16)) {
       throw new InvalidRoaringFormat("Size too large");
@@ -387,7 +387,7 @@ public final class RoaringArray implements Cloneable, Externalizable, Appendable
     }
 
 
-    byte[] bitmapOfRunContainers = null;
+    byte[] bitmapOfRunContainers = null; // 标记第几个container是runContainer
     boolean hasrun = (cookie & 0xFFFF) == SERIAL_COOKIE;
     if (hasrun) {
       bitmapOfRunContainers = new byte[(size + 7) / 8];
@@ -398,15 +398,15 @@ public final class RoaringArray implements Cloneable, Externalizable, Appendable
     final int[] cardinalities = new int[this.size];
     final boolean[] isBitmap = new boolean[this.size];
     for (int k = 0; k < this.size; ++k) {
-      keys[k] = Character.reverseBytes(in.readChar());
-      cardinalities[k] = 1 + (0xFFFF & Character.reverseBytes(in.readChar()));
+      keys[k] = Character.reverseBytes(in.readChar()); // 第k个容器映射的key
+      cardinalities[k] = 1 + (0xFFFF & Character.reverseBytes(in.readChar())); // 第k个容器内部的元素个数
 
-      isBitmap[k] = cardinalities[k] > ArrayContainer.DEFAULT_MAX_SIZE;
+      isBitmap[k] = cardinalities[k] > ArrayContainer.DEFAULT_MAX_SIZE; // 元素个数>4096个，容器就是bitmap类型容器
       if (bitmapOfRunContainers != null && (bitmapOfRunContainers[k / 8] & (1 << (k % 8))) != 0) {
-        isBitmap[k] = false;
+        isBitmap[k] = false; // 如果是runContainer容器，就不再是bitmap容器
       }
     }
-    if ((!hasrun) || (this.size >= NO_OFFSET_THRESHOLD)) {
+    if ((!hasrun) || (this.size >= NO_OFFSET_THRESHOLD)) { // 跳过offset header部分，这只用于随机读取container
       // skipping the offsets
       in.skipBytes(this.size * 4);
     }
@@ -414,22 +414,24 @@ public final class RoaringArray implements Cloneable, Externalizable, Appendable
     // Reading the containers
     for (int k = 0; k < this.size; ++k) {
       Container val;
-      if (isBitmap[k]) {
-        final long[] bitmapArray = new long[BitmapContainer.MAX_CAPACITY / 64];
+      if (isBitmap[k]) { // 第k个容器是bitmap容器
+        final long[] bitmapArray = new long[BitmapContainer.MAX_CAPACITY / 64]; // 2^16个bit位
         
         if (buffer == null) {
           // a buffer to load a Container in a single .readFully
           // We initialize it with the length of a BitmapContainer
-          buffer = new byte[(BitmapContainer.MAX_CAPACITY / 64) * 8];
+          buffer = new byte[(BitmapContainer.MAX_CAPACITY / 64) * 8]; // 创建一个 2^16个bit的buffer
         }
         
-        if (buffer.length < (BitmapContainer.MAX_CAPACITY / 64) * 8) {
+        if (buffer.length < (BitmapContainer.MAX_CAPACITY / 64) * 8) { // 提供的buffer比较小
           // We have been provided a rather small buffer
           
-          for (int iBlock = 0 ; iBlock <= bitmapArray.length / buffer.length / 8; iBlock++) {
+          //for (int iBlock = 0 ; iBlock <= bitmapArray.length / buffer.length / 8; iBlock++) {
+          for (int iBlock = 0 ; iBlock <= 8 * bitmapArray.length / buffer.length ; iBlock++) {
             int start = buffer.length * iBlock;
-            int end = Math.min(buffer.length * (iBlock +1 ) - 1, 8 * bitmapArray.length);
-            
+            //int end = Math.min(buffer.length * (iBlock +1 ) - 1, 8 * bitmapArray.length);
+            int end = Math.min(buffer.length * (iBlock +1 ) , 8 * bitmapArray.length);
+
             in.readFully(buffer, 0, end - start);
             
             // little endian
@@ -438,7 +440,7 @@ public final class RoaringArray implements Cloneable, Externalizable, Appendable
             
             LongBuffer asLongBuffer = asByteBuffer.asLongBuffer();
             asLongBuffer.rewind();
-            asLongBuffer.get(bitmapArray, start, (end - start) / 8); 
+            asLongBuffer.get(bitmapArray, start/8, (end - start) / 8);
           }
           
         } else {
@@ -472,10 +474,12 @@ public final class RoaringArray implements Cloneable, Externalizable, Appendable
             lengthsAndValues[j] = Character.reverseBytes(in.readChar());
           }
         } else {
-          for (int iBlock = 0 ; iBlock <= lengthsAndValues.length / buffer.length / 2; iBlock++) {
+          //for (int iBlock = 0 ; iBlock <= lengthsAndValues.length / buffer.length / 2; iBlock++) {
+          for (int iBlock = 0 ; iBlock <= 2 * lengthsAndValues.length / buffer.length ; iBlock++) {
             int start = buffer.length * iBlock;
-            int end = Math.min(buffer.length * (iBlock +1 ) - 1, 2 * lengthsAndValues.length);
-            
+            // int end = Math.min(buffer.length * (iBlock +1 ) - 1, 2 * lengthsAndValues.length);
+            int end = Math.min(buffer.length * (iBlock +1 ) , 2 * lengthsAndValues.length);
+
             in.readFully(buffer, 0, end - start);
 
             // little endian
@@ -484,7 +488,7 @@ public final class RoaringArray implements Cloneable, Externalizable, Appendable
             
             CharBuffer asCharBuffer = asByteBuffer.asCharBuffer();
             asCharBuffer.rewind();
-            asCharBuffer.get(lengthsAndValues, start, (end - start) / 2);
+            asCharBuffer.get(lengthsAndValues, start/2, (end - start) / 2);
           }
         }
         
@@ -504,10 +508,12 @@ public final class RoaringArray implements Cloneable, Externalizable, Appendable
             charArray[j] = Character.reverseBytes(in.readChar());
           }
         } else {
-          for (int iBlock = 0 ; iBlock <= charArray.length / buffer.length / 2; iBlock++) {
+          //for (int iBlock = 0 ; iBlock <= charArray.length / buffer.length / 2; iBlock++) {
+          for (int iBlock = 0 ; iBlock <= 2 * charArray.length / buffer.length ; iBlock++) {
             int start = buffer.length * iBlock;
-            int end = Math.min(buffer.length * (iBlock +1 ) - 1, 2 * charArray.length);
-            
+            //int end = Math.min(buffer.length * (iBlock +1 ) - 1, 2 * charArray.length);
+            int end = Math.min(buffer.length * (iBlock +1 ) , 2 * charArray.length);
+
             in.readFully(buffer, 0, end - start);
 
             // little endian
@@ -516,7 +522,7 @@ public final class RoaringArray implements Cloneable, Externalizable, Appendable
             
             CharBuffer asCharBuffer = asByteBuffer.asCharBuffer();
             asCharBuffer.rewind();
-            asCharBuffer.get(charArray, start, (end - start) / 2);
+            asCharBuffer.get(charArray, start/2, (end - start) / 2);
           }
         }
         

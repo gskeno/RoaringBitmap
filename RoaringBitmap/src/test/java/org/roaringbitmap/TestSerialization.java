@@ -109,11 +109,12 @@ public class TestSerialization {
 
   static ByteBuffer presoutbb;
   
-  // Very small buffer to higher to chance to encounter edge-case
+  // Very small buffer to higher to chance to encounter edge-case 非常小的缓冲，以更高的机会遇到边缘情况
   byte[] buffer = new byte[16];
 
   @BeforeAll
   public static void init() throws IOException {
+    // 10万个随机int
     final int[] data = takeSortedAndDistinct(new Random(0xcb000a2b9b5bdfb6L), 100000);
     bitmap_a = RoaringBitmap.bitmapOf(data);
     bitmap_ar = MutableRoaringBitmap.bitmapOf(data);
@@ -125,6 +126,7 @@ public class TestSerialization {
       bitmap_a1.add(3 * k);
     }
 
+    // 10万个连续元素，runcontainer是最好的
     for (int k = 700000; k < 800000; ++k) { // runcontainer would be best
       bitmap_a.add(k);
       bitmap_ar.add(k);
@@ -141,16 +143,20 @@ public class TestSerialization {
      */
     // do not runoptimize bitmap_a1
 
+    // 这两个byteBuffer的大小一样，可以装入两个bitmap
     outbb = ByteBuffer
         .allocate(bitmap_a.serializedSizeInBytes() + bitmap_empty.serializedSizeInBytes());
     presoutbb = ByteBuffer
         .allocate(bitmap_a.serializedSizeInBytes() + bitmap_empty.serializedSizeInBytes());
-    ByteBufferBackedOutputStream out = new ByteBufferBackedOutputStream(presoutbb);
 
+    // 往presoutbb这个bytebuffer中写入数据
+    ByteBufferBackedOutputStream out = new ByteBufferBackedOutputStream(presoutbb);
     DataOutputStream dos = new DataOutputStream(out);
     bitmap_empty.serialize(dos);
-    bitmap_a.serialize(dos);
-    presoutbb.flip();
+    bitmap_a.serialize(dos); // pos指向下一个写入的位置, limit指向capacity
+
+
+    presoutbb.flip(); // limit指向pos, pos指向0， 可以开始读了
 
   }
 
@@ -183,11 +189,12 @@ public class TestSerialization {
 
   @Test
   public void testDeserialize() throws IOException {
-    presoutbb.rewind();
+    presoutbb.rewind(); // position指向0，重新读取一遍
     ByteBufferBackedInputStream in = new ByteBufferBackedInputStream(presoutbb);
     DataInputStream dis = new DataInputStream(in);
-    bitmap_empty.deserialize(dis);
-    bitmap_b.deserialize(dis);
+    bitmap_empty.deserialize(dis); // 最终会调用到本文件中的类, ByteBufferBackedInputStream， 会改变内部byteBuffer的position
+    bitmap_b.deserialize(dis); // 内部bytebuffer的position = limit = capacity,全部字节读取完
+    assertEquals(bitmap_a, bitmap_b);
   }
 
   @Test
@@ -197,6 +204,7 @@ public class TestSerialization {
     DataInputStream dis = new DataInputStream(in);
     bitmap_empty.deserialize(dis, buffer);
     bitmap_b.deserialize(dis, buffer);
+    assertEquals(bitmap_a, bitmap_b);
   }
 
   @Test

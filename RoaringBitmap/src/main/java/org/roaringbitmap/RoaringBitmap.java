@@ -1685,7 +1685,7 @@ public class RoaringBitmap implements Cloneable, Serializable, Iterable<Integer>
    * @param buffer The buffer gets overwritten with data during deserialization. You can pass a NULL
    *        reference as a buffer. A buffer containing at least 8192 bytes might be ideal for
    *        performance. It is recommended to reuse the buffer between calls to deserialize (in a
-   *        single-threaded context) for best performance.
+   *        single-threaded context) for best performance. buffer用来重复装载数据，复用以提高性能
    * @throws IOException Signals that an I/O exception has occurred.
    */
   public void deserialize(DataInput in, byte[] buffer) throws IOException {
