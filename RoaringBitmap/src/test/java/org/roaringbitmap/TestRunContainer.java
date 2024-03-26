@@ -3165,7 +3165,7 @@ public class TestRunContainer {
     rc.add((char) 13);
     assertTrue(rc.contains((char) 13));
 
-    rc.ensureCapacity(10);
+    rc.ensureCapacity(0, 10);
     assertTrue(rc.contains((char) 13));
   }
 
@@ -3946,6 +3946,13 @@ public class TestRunContainer {
     ValidationRangeConsumer consumer10 = ValidationRangeConsumer.ofSize(middle);
     container.forAllInRange((char) quarter, (char) (middle + quarter), consumer10);
     consumer10.assertAllPresent();
+  }
+
+  @Test
+  public void iorWithFullContainer() {
+    Container container = new ArrayContainer(new char[] {1, 3, 4, (char)-1});
+    container = container.ior(RunContainer.full());
+    assertEquals(RunContainer.full(), container);
   }
 
   private static int lower16Bits(int x) {

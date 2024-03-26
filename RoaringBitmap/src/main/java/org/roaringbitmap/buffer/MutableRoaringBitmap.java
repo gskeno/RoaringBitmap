@@ -107,11 +107,14 @@ public class MutableRoaringBitmap extends ImmutableRoaringBitmap
       for(int pos = 0; pos < x.highLowContainer.size(); pos++) {
         int key = (x.highLowContainer.getKeyAtIndex(pos));
         key += container_offset;
+        if (key + 1 < 0 || key > 0xFFFF) {
+          continue;
+        }
         MappeableContainer c = x.highLowContainer.getContainerAtIndex(pos);
         MappeableContainer[] offsetted = BufferUtil.addOffset(c,
                 (char)in_container_offset);
-        boolean keyok = (key >= 0) && (key <= 0xFFFF);
-        boolean keypok = (key + 1 >= 0) && (key + 1 <= 0xFFFF);
+        boolean keyok = key >= 0;
+        boolean keypok = key + 1 <= 0xFFFF;
         if( !offsetted[0].isEmpty() && keyok) {
           int current_size = answer.highLowContainer.size();
           int lastkey = 0;
@@ -397,6 +400,37 @@ public class MutableRoaringBitmap extends ImmutableRoaringBitmap
   }
 
 
+  /**
+   * @see #add(long, long)
+   */
+  public static MutableRoaringBitmap bitmapOfRange(long min, long max) {
+    rangeSanityCheck(min, max);
+    if (min >= max) {
+      return new MutableRoaringBitmap();
+    }
+    final int hbStart = BufferUtil.highbits(min);
+    final int lbStart = BufferUtil.lowbits(min);
+    final int hbLast = BufferUtil.highbits(max - 1);
+    final int lbLast = BufferUtil.lowbits(max - 1);
+
+    MutableRoaringArray array = new MutableRoaringArray(hbLast - hbStart + 1);
+    MutableRoaringBitmap bitmap = new MutableRoaringBitmap(array);
+
+    int firstEnd = hbStart < hbLast ? 1 << 16 : lbLast + 1;
+    MappeableContainer firstContainer = MappeableContainer.rangeOfOnes(lbStart, firstEnd);
+    bitmap.append((char) hbStart, firstContainer);
+    if (hbStart < hbLast) {
+      int i = hbStart + 1;
+      while (i < hbLast) {
+        MappeableContainer runContainer = MappeableContainer. rangeOfOnes(0, 1 << 16);
+        bitmap.append((char) i, runContainer);
+        i++;
+      }
+      MappeableContainer lastContainer = MappeableContainer.rangeOfOnes(0, lbLast + 1);
+      bitmap.append((char) hbLast, lastContainer);
+    }
+    return bitmap;
+  }
 
   protected static void rangeSanityCheck(final long rangeStart, final long rangeEnd) {
     if (rangeStart < 0 || rangeStart > (1L << 32)-1) {
@@ -969,10 +1003,10 @@ public class MutableRoaringBitmap extends ImmutableRoaringBitmap
         s1 = pos1 < length1 ? highLowContainer.getKeyAtIndex(pos1) : maxKey + 1;
         s2 = pos2 < length2 ? other.highLowContainer.getKeyAtIndex(pos2) : maxKey + 1;
       } else if (key == s1) { // or in a hole
-        newValues[size] = highLowContainer.getContainerAtIndex(pos1)
-                .ior(key == maxKey
-                        ? MappeableRunContainer.rangeOfOnes(0, lastRun)
-                        : MappeableRunContainer.full());
+        newValues[size] = key == maxKey
+            ? highLowContainer.getContainerAtIndex(pos1).ior(
+            MappeableRunContainer.rangeOfOnes(0, lastRun))
+            : MappeableRunContainer.full();
         ++pos1;
         s1 = pos1 < length1 ? highLowContainer.getKeyAtIndex(pos1) : maxKey + 1;
       } else if (key == s2) { // insert the complement
@@ -1019,15 +1053,26 @@ public class MutableRoaringBitmap extends ImmutableRoaringBitmap
     final int i = highLowContainer.getIndex(hb);
     if (i >= 0) {
       MappeableContainer C = highLowContainer.getContainerAtIndex(i);
-      int oldcard = C.getCardinality();
-      C = C.add(BufferUtil.lowbits(x));
-      getMappeableRoaringArray().setContainerAtIndex(i, C);
-      return C.getCardinality() > oldcard;
+      char lowX = BufferUtil.lowbits(x);
+      MappeableContainer newCont;
+      if (C instanceof MappeableRunContainer) { // do not compute cardinality
+        if (!C.contains(lowX)) {
+          newCont = C.add(lowX);
+          getMappeableRoaringArray().setContainerAtIndex(i, newCont);
+          return true;
+        }
+      } else { // it is faster to use getCardinality() than contains() for other container types
+        int oldCard = C.getCardinality();
+        newCont = C.add(lowX);
+        getMappeableRoaringArray().setContainerAtIndex(i, newCont);
+        return newCont.getCardinality() > oldCard;
+      }
     } else {
       final MappeableArrayContainer newac = new MappeableArrayContainer();
       getMappeableRoaringArray().insertNewKeyValueAt(-i - 1, hb, newac.add(BufferUtil.lowbits(x)));
       return true;
     }
+    return false;
   }
 
   /**

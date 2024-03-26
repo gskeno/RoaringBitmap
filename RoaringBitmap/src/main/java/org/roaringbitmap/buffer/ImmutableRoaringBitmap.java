@@ -482,10 +482,10 @@ public class ImmutableRoaringBitmap
         s1 = pos1 < length1 ? x1.highLowContainer.getKeyAtIndex(pos1) : maxKey + 1;
         s2 = pos2 < length2 ? x2.highLowContainer.getKeyAtIndex(pos2) : maxKey + 1;
       } else if (key == s1) { // or in a hole
-        newValues[size] = x1.highLowContainer.getContainerAtIndex(pos1)
-                .ior(key == maxKey
-                        ? MappeableRunContainer.rangeOfOnes(0, lastRun)
-                        : MappeableRunContainer.full());
+        newValues[size] = key == maxKey
+            ? x1.highLowContainer.getContainerAtIndex(pos1).ior(
+            MappeableRunContainer.rangeOfOnes(0, lastRun))
+            : MappeableRunContainer.full();
         ++pos1;
         s1 = pos1 < length1 ? x1.highLowContainer.getKeyAtIndex(pos1) : maxKey + 1;
       } else if (key == s2) { // insert the complement
@@ -1249,9 +1249,14 @@ public class ImmutableRoaringBitmap
     while (pos < length && minKey > (highLowContainer.getKeyAtIndex(pos))) {
       ++pos;
     }
+    // it is possible for pos == length to be true
+    if(pos == length) {
+      return false;
+    }
+    // we have that pos < length.
     int offset = (minKey == highLowContainer.getKeyAtIndex(pos)) ? lowbitsAsInteger(minimum) : 0;
     int limit = lowbitsAsInteger(supremum);
-    if (pos < length && supKey == (highLowContainer.getKeyAtIndex(pos))) {
+    if (supKey == (highLowContainer.getKeyAtIndex(pos))) {
       if (supKey > minKey) {
         offset = 0;
       }

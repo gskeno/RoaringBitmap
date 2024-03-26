@@ -817,19 +817,30 @@ public final class RunContainer extends Container implements Cloneable {
     }
     final int runCount = numberOfRuns();
     char ib = 0, ir = 0;
+    int start = getValue(ir);
+    int stop = start + getLength(ir);
     while(ib < bitmapContainer.bitmap.length && ir < runCount) {
       long w = bitmapContainer.bitmap[ib];
-      while (w != 0 && ir < runCount) {
-        int start = (getValue(ir));
-        int stop = start+ (getLength(ir));
-        long t = w & -w;
+      while (true) {
         long r = ib * 64L + Long.numberOfTrailingZeros(w);
         if (r < start) {
           return false;
         } else if(r > stop) {
           ++ir;
+          if (ir == runCount) {
+            break;
+          }
+          w &= w - 1;
+          start = getValue(ir);
+          stop = start + getLength(ir);
+        } else if (ib * 64 + 64 < stop) {
+          ib = (char) (stop / 64);
+          w = bitmapContainer.bitmap[ib];
         } else {
-          w ^= t;
+          w &= w - 1;
+          if (w == 0) {
+            break;
+          }
         }
       }
       if(w == 0) {
@@ -871,19 +882,7 @@ public final class RunContainer extends Container implements Cloneable {
 
   // Push all values length to the end of the array (resize array if needed)
   private void copyToOffset(int offset) {
-    final int minCapacity = 2 * (offset + nbrruns);
-    if (valueslength.length < minCapacity) {
-      // expensive case where we need to reallocate
-      int newCapacity = valueslength.length;
-      while (newCapacity < minCapacity) {
-        newCapacity = (newCapacity == 0) ? DEFAULT_INIT_SIZE
-            : newCapacity < 64 ? newCapacity * 2
-                : newCapacity < 1024 ? newCapacity * 3 / 2 : newCapacity * 5 / 4;
-      }
-      char[] newvalueslength = new char[newCapacity];
-      copyValuesLength(this.valueslength, 0, newvalueslength, offset, nbrruns);
-      this.valueslength = newvalueslength;
-    } else {
+    if (!ensureCapacity(offset, 2 * (offset + nbrruns))) {
       // efficient case where we just copy
       copyValuesLength(this.valueslength, 0, this.valueslength, offset, nbrruns);
     }
@@ -915,19 +914,19 @@ public final class RunContainer extends Container implements Cloneable {
   }
 
   // not actually used anywhere, but potentially useful
-  void ensureCapacity(int minNbRuns) {
+  boolean ensureCapacity(int offset, int minNbRuns) {
     final int minCapacity = 2 * minNbRuns;
     if (valueslength.length < minCapacity) {
       int newCapacity = valueslength.length;
-      while (newCapacity < minCapacity) {
-        newCapacity = (newCapacity == 0) ? DEFAULT_INIT_SIZE
-            : newCapacity < 64 ? newCapacity * 2
-                : newCapacity < 1024 ? newCapacity * 3 / 2 : newCapacity * 5 / 4;
+      while(newCapacity < minCapacity) {
+        newCapacity = computeCapacity(newCapacity);
       }
       char[] nv = new char[newCapacity];
-      copyValuesLength(valueslength, 0, nv, 0, nbrruns);
+      copyValuesLength(valueslength, 0, nv, offset, nbrruns);
       valueslength = nv;
+      return true;
     }
+    return false;
   }
 
   @Override
@@ -1086,8 +1085,8 @@ public final class RunContainer extends Container implements Cloneable {
     }
 
     int bIndex = unsignedInterleavedBinarySearch(this.valueslength, 0, this.nbrruns, (char) begin);
-    int eIndex =
-        unsignedInterleavedBinarySearch(this.valueslength, 0, this.nbrruns, (char) (end - 1));
+    int eIndex = unsignedInterleavedBinarySearch(this.valueslength,
+        bIndex >= 0 ? bIndex : -bIndex - 1, this.nbrruns, (char) (end - 1));
 
     if (bIndex >= 0 && eIndex >= 0) {
       mergeValuesLength(bIndex, eIndex);
@@ -1244,16 +1243,12 @@ public final class RunContainer extends Container implements Cloneable {
     return convertToLazyBitmapIfNeeded();
   }
 
-  private void increaseCapacity() {
-    int newCapacity = (valueslength.length == 0) ? DEFAULT_INIT_SIZE
-        : valueslength.length < 64 ? valueslength.length * 2
-            : valueslength.length < 1024 ? valueslength.length * 3 / 2
-                : valueslength.length * 5 / 4;
-    char[] nv = new char[newCapacity];
-    System.arraycopy(valueslength, 0, nv, 0, 2 * nbrruns);
-    valueslength = nv;
+  private int computeCapacity(int oldCapacity) {
+    return oldCapacity == 0 ? DEFAULT_INIT_SIZE
+        : oldCapacity < 64 ? oldCapacity * 2
+        : oldCapacity < 1024 ? oldCapacity * 3 / 2
+        : oldCapacity * 5 / 4;
   }
-
 
   private void incrementLength(int index) {
     valueslength[2 * index + 1]++;
@@ -1574,8 +1569,8 @@ public final class RunContainer extends Container implements Cloneable {
     }
 
     int bIndex = unsignedInterleavedBinarySearch(this.valueslength, 0, this.nbrruns, (char) begin);
-    int eIndex =
-        unsignedInterleavedBinarySearch(this.valueslength, 0, this.nbrruns, (char) (end - 1));
+    int eIndex = unsignedInterleavedBinarySearch(this.valueslength,
+        bIndex >= 0 ? bIndex : -bIndex - 1, this.nbrruns, (char) (end - 1));
 
     // note, eIndex is looking for (end-1)
 
@@ -1884,7 +1879,10 @@ public final class RunContainer extends Container implements Cloneable {
 
   private void makeRoomAtIndex(int index) {
     if (2 * (nbrruns + 1) > valueslength.length) {
-      increaseCapacity();
+      int newCapacity = computeCapacity(valueslength.length);
+      char[] newValuesLength = new char[newCapacity];
+      copyValuesLength(valueslength, 0, newValuesLength, 0, nbrruns);
+      valueslength = newValuesLength;
     }
     copyValuesLength(valueslength, index, valueslength, index + 1, nbrruns - index);
     nbrruns++;
@@ -2198,7 +2196,7 @@ public final class RunContainer extends Container implements Cloneable {
     if ((nbrruns == 0) || ((start) > (oldend =
         (getValue(nbrruns - 1)) + (getLength(nbrruns - 1)))
         + 1)) { // we add a new one
-      ensureCapacity(nbrruns + 1);
+      ensureCapacity(0, nbrruns + 1);
       valueslength[2 * nbrruns] = start;
       valueslength[2 * nbrruns + 1] = length;
       nbrruns++;
